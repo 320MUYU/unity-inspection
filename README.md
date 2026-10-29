@@ -4,19 +4,29 @@
 
 ## 技术方案
 
-- 巡检端：Unity LTS、C#，在本机 Unity Editor 或桌面环境运行。
+- 巡检端：目标版本 Unity 6 `6000.0.23f1` LTS、C#，在本机 Unity Editor 或桌面环境运行。
 - 管理端：React、TypeScript，计划使用 Docker 在本地运行。
 - 后端：Go，计划使用 Docker 在本地运行，持久化保存问题数据。
-- Unity 与浏览器管理端访问同一个本地 Go 后端。Docker 编排、端口及持久化配置待实现后补充。
+- Unity 与浏览器管理端访问同一个本地 Go 后端。后端绑定 `http://localhost:18765`，管理页面绑定 `http://localhost:3000`。
 
 ## 当前进度
 
-目前仅完成项目文档初始化；Unity、React、Go、Docker 配置及业务功能尚未实现，暂不可启动。具体版本、启动步骤、后端地址和接口设计待实现后补充。
+Go 后端、React 管理页面和 Docker Compose 已实现并验证；后端使用 Go 1.23 和 JSON 数据卷，管理端使用 React 18、TypeScript 5.7、Vite 6。Unity 项目正在准备，编辑器尚未安装，因此尚未验证项目导入、Play 模式、Windows 构建或三端闭环。演示视频尚未录制。
+
+## 启动与接口
+
+启动 Docker Desktop，在项目根目录执行 `docker compose up -d --build`，再访问 `http://localhost:3000`。停止服务执行 `docker compose down`；不要添加 `-v`，否则会删除持久化数据卷。
+
+在 Unity Hub 中使用 Unity 6 `6000.0.23f1` 打开 `unity` 目录。编辑器首次导入时会尝试创建巡检场景；可通过 `Inspection > Open inspection scene` 打开场景并进入 Play 模式。该步骤尚未在编辑器中验证。
+
+计划操作为 WASD 移动、按住鼠标右键转动视角、左键点击场景放置标记。填写面板打开时忽略场景点击，取消时移除未保存的标记。
+
+后端接口：`GET /health` 检查服务，`POST /issues` 创建问题，`GET /issues` 查询列表，`PATCH /issues/{id}/status` 修改状态，例如请求体 `{"status":"resolved"}`。创建时提交 `title`、`description`、`priority` 和包含 `x`、`y`、`z` 的 `position`；优先级为 `low`、`medium`、`high`，状态为 `open`、`in_progress`、`resolved`。错误响应包含 `error` 字段。
 
 ## 待确认事项
 
 - 演示要求中的“真机”是否包含普通电脑上的 Unity Editor 或桌面程序。
-- 已存在待提交标记时，再次点击场景应如何处理。
+- 按当前决定，填写面板打开时为模态状态，忽略场景点击。
 
 ## 交付要求
 
@@ -24,4 +34,6 @@
 
 ## AR 基础问题
 
-任务书要求在 README 中回答 AR Foundation 平面检测及点击放置、跨会话位置稳定性和 AR 异常提示三个问题；答案待补充。此备选题不要求实现真实 AR 功能。
+1. 使用 AR Foundation 的 `ARPlaneManager` 检测平面，使用 `ARRaycastManager` 将屏幕点击转换为平面命中位姿，再放置对象；具体能力取决于设备和 AR 提供程序。
+2. Unity 坐标属于当前会话的坐标系，重启后原点和方向可能改变。仅保存 xyz 不能保证真实位置不变；需要对应平台的持久化锚点、重定位或其他空间配准方案。
+3. 初始化失败或设备不支持时，应说明原因并提供重试、退出或替代方式；Tracking 异常时提示用户改善光照、移动设备或等待恢复，避免把不可靠位置当作准确结果。
