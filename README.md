@@ -11,7 +11,7 @@
 
 ## 当前进度
 
-Go 后端、React 管理页面和 Docker Compose 已实现并验证；后端使用 Go 1.23 和 JSON 数据卷，管理端使用 React 18、TypeScript 5.7、Vite 6。Unity 项目正在准备，编辑器已安装但尚无有效许可证，项目导入、Play 模式、Windows 构建和三端闭环尚待验证。演示视频尚未录制。
+Go 后端、React 管理页面和 Docker Compose 已实现并验证；后端使用 Go 1.23 和 JSON 数据卷，管理端使用 React 18、TypeScript 5.7、Vite 6。Unity 项目正在准备，编辑器和许可证已就绪，但包管理器报错阻止导入；Play 模式、Windows 构建和三端闭环尚待验证。演示视频尚未录制。
 
 ## 启动与接口
 

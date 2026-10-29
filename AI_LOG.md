@@ -186,3 +186,18 @@ Unity 编辑器：6000.0.85f1 LTS
 
 - 采用：项目版本调整为已安装的同一 LTS 系列补丁版本 `6000.0.85f1`。
 - 验证：检查编辑器文件和文件版本；尝试导入并运行 Edit Mode 测试时，Unity 提示没有有效许可证，测试尚未运行。
+
+## P-011
+
+- 目标：确认 Unity 许可证已处理，继续导入和测试。
+
+### Prompt 原文
+
+```text
+ok了
+```
+
+### 结果
+
+- 采用：重新运行 Unity 项目导入与测试。
+- 验证：Unity 识别到有效许可证，但包管理器报 `The "path" argument must be of type string. Received undefined`；英文临时路径和空包清单的诊断也出现相同错误，测试未能运行。
