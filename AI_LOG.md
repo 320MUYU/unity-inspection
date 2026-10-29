@@ -169,3 +169,20 @@ C:\Users\32011\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Tuanjie Cow
 
 - 采用：选择 Unity 6 的 6000.0 LTS 系列，具体版本以可获得的官方版本为准。
 - 验证：用户确认未安装；Unity 运行和构建尚待安装编辑器后验证。
+
+## P-010
+
+- 目标：提供已安装的 Unity Hub 和 Unity 编辑器信息。
+
+### Prompt 原文
+
+```text
+Unity Hub：D:\Unity\Hub\Unity Hub.exe
+Unity 编辑器：6000.0.85f1 LTS
+编辑器路径：D:\Unity\Editors\6000.0.85f1\Editor\Unity.exe
+```
+
+### 结果
+
+- 采用：项目版本调整为已安装的同一 LTS 系列补丁版本 `6000.0.85f1`。
+- 验证：检查编辑器文件和文件版本；尝试导入并运行 Edit Mode 测试时，Unity 提示没有有效许可证，测试尚未运行。

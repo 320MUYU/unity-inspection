@@ -4,20 +4,20 @@
 
 ## 技术方案
 
-- 巡检端：目标版本 Unity 6 `6000.0.23f1` LTS、C#，在本机 Unity Editor 或桌面环境运行。
+- 巡检端：Unity 6 `6000.0.85f1` LTS、C#，在本机 Unity Editor 或桌面环境运行。
 - 管理端：React、TypeScript，计划使用 Docker 在本地运行。
 - 后端：Go，计划使用 Docker 在本地运行，持久化保存问题数据。
 - Unity 与浏览器管理端访问同一个本地 Go 后端。后端绑定 `http://localhost:18765`，管理页面绑定 `http://localhost:3000`。
 
 ## 当前进度
 
-Go 后端、React 管理页面和 Docker Compose 已实现并验证；后端使用 Go 1.23 和 JSON 数据卷，管理端使用 React 18、TypeScript 5.7、Vite 6。Unity 项目正在准备，编辑器尚未安装，因此尚未验证项目导入、Play 模式、Windows 构建或三端闭环。演示视频尚未录制。
+Go 后端、React 管理页面和 Docker Compose 已实现并验证；后端使用 Go 1.23 和 JSON 数据卷，管理端使用 React 18、TypeScript 5.7、Vite 6。Unity 项目正在准备，编辑器已安装但尚无有效许可证，项目导入、Play 模式、Windows 构建和三端闭环尚待验证。演示视频尚未录制。
 
 ## 启动与接口
 
 启动 Docker Desktop，在项目根目录执行 `docker compose up -d --build`，再访问 `http://localhost:3000`。停止服务执行 `docker compose down`；不要添加 `-v`，否则会删除持久化数据卷。
 
-在 Unity Hub 中使用 Unity 6 `6000.0.23f1` 打开 `unity` 目录。编辑器首次导入时会尝试创建巡检场景；可通过 `Inspection > Open inspection scene` 打开场景并进入 Play 模式。该步骤尚未在编辑器中验证。
+在 Unity Hub 中使用 Unity 6 `6000.0.85f1` 打开 `unity` 目录。编辑器首次导入时会尝试创建巡检场景；可通过 `Inspection > Open inspection scene` 打开场景并进入 Play 模式。该步骤尚未在编辑器中验证。
 
 计划操作为 WASD 移动、按住鼠标右键转动视角、左键点击场景放置标记。填写面板打开时忽略场景点击，取消时移除未保存的标记。
 
