@@ -3,7 +3,7 @@ import './style.css';
 
 type Status = 'open' | 'in_progress' | 'resolved';
 type Issue = { id: string; title: string; priority: 'low' | 'medium' | 'high'; status: Status };
-const api = 'http://localhost:8080';
+const api = 'http://localhost:18765';
 const statuses: Record<Status, string> = { open: '待处理', in_progress: '处理中', resolved: '已解决' };
 const priorities = { low: '低', medium: '中', high: '高' };
 

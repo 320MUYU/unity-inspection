@@ -1,0 +1,15 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "127.0.0.1:18765:8080"
+    volumes:
+      - inspection-data:/data
+  web:
+    build: ./web
+    ports:
+      - "127.0.0.1:3000:80"
+    depends_on:
+      - backend
+volumes:
+  inspection-data:
