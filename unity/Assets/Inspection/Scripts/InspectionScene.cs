@@ -89,6 +89,7 @@ public static class InspectionScene
 
     private static void Cabinet(Transform parent, string id, Vector3 position, Material body, Material panel, Material metal, Material green)
     {
+        parent = DeviceRoot(parent, id, "机柜 " + id);
         Cube(parent, "Cabinet " + id, position, new Vector3(1.55f, 2.2f, 1.1f), body);
         var front = position.z - .57f;
         Cube(parent, id + " door", new Vector3(position.x, position.y, front), new Vector3(1.38f, 2.03f, .04f), panel);
@@ -101,6 +102,7 @@ public static class InspectionScene
 
     private static void ElectricalBox(Transform parent, Vector3 position, Material body, Material door, Material dark, Material metal, Material amber)
     {
+        parent = DeviceRoot(parent, "POWER-01", "配电箱 POWER-01");
         // Retain the original centre while making the raised electrical box clearly smaller than the floor-standing racks.
         Cube(parent, "Electrical cabinet", position, new Vector3(1.20f, 1.35f, .62f), body);
         var front = position.z - .33f;
@@ -122,6 +124,14 @@ public static class InspectionScene
         WarningMesh(parent, "Electrical warning bolt", warning + new Vector3(0, 0, -.005f), dark,
             new[] { new Vector3(-.01f, .105f, 0), new Vector3(-.09f, -.015f, 0), new Vector3(-.015f, -.015f, 0), new Vector3(-.045f, -.11f, 0), new Vector3(.085f, .025f, 0), new Vector3(.02f, .025f, 0) },
             new[] { 0, 2, 1, 0, 5, 2, 2, 4, 3, 2, 5, 4 });
+    }
+
+    private static Transform DeviceRoot(Transform parent, string id, string displayName)
+    {
+        var device = new GameObject("Device " + id);
+        device.transform.SetParent(parent, false);
+        device.AddComponent<InspectionDevice>().Initialize(id, displayName);
+        return device.transform;
     }
 
     private static void WarningMesh(Transform parent, string name, Vector3 position, Material material, Vector3[] vertices, int[] triangles)

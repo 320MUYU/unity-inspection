@@ -9,6 +9,8 @@ using UnityEngine.Networking;
 
 public class InspectionUITests
 {
+    [System.Serializable] private sealed class TestIssues { public InspectionIssue[] items; }
+
     private static T Field<T>(InspectionApp app, string name)
     {
         return (T)typeof(InspectionApp).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance).GetValue(app);
@@ -47,6 +49,35 @@ public class InspectionUITests
             var ray = camera.ViewportPointToRay(new Vector3(.5f, .5f, 0));
             Assert.IsTrue(Physics.Raycast(ray, out var hit, 20f));
             StringAssert.Contains("A-01", hit.collider.gameObject.name);
+        }
+        finally { camera.transform.rotation = originalRotation; }
+    }
+
+    [UnityTest]
+    public IEnumerator HittingDifferentCabinetsShowsTheirOwnDeviceInTheForm()
+    {
+        yield return null;
+        var app = Object.FindFirstObjectByType<InspectionApp>();
+        var camera = Field<Camera>(app, "view");
+        var look = Field<InspectionLookState>(app, "look");
+        var originalRotation = camera.transform.rotation;
+        var method = typeof(InspectionApp).GetMethod("BeginReport", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.IsNotNull(method);
+        try
+        {
+            foreach (var example in new[] { new { position = new Vector3(-2.8f, 1.1f, 5.6f), id = "A-01" }, new { position = new Vector3(2.8f, 1.1f, 7.6f), id = "A-02" } })
+            {
+                look.SetFocus(true);
+                if (!look.IsCaptured) look.TryCapture(Time.frameCount);
+                camera.transform.LookAt(example.position);
+                Physics.SyncTransforms();
+                Assert.IsTrue(Physics.Raycast(camera.ViewportPointToRay(new Vector3(.5f, .5f, 0)), out var hit, 20f));
+                method.Invoke(app, new object[] { hit });
+                Assert.AreEqual(example.id, Field<string>(app, "selectedDeviceId"));
+                StringAssert.Contains(example.id, Field<Text>(app, "deviceLabel").text);
+                Field<Button>(app, "cancelButton").onClick.Invoke();
+                yield return null;
+            }
         }
         finally { camera.transform.rotation = originalRotation; }
     }
@@ -91,6 +122,8 @@ public class InspectionUITests
         var crosshair = Field<GameObject>(app, "crosshair");
         var controlHint = Field<Text>(app, "controlHint");
         var previousHint = controlHint.text;
+        var deviceLabel = Field<Text>(app, "deviceLabel");
+        var previousDevice = deviceLabel.text;
         var originalPosition = camera.transform.position;
         var originalRotation = camera.transform.rotation;
         var previousCrosshair = crosshair.activeSelf;
@@ -104,6 +137,7 @@ public class InspectionUITests
         {
             typeof(InspectionApp).GetMethod("SelectPriority", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(app, new object[] { 1 });
             Field<Text>(app, "positionLabel").text = "X -2.80   Y 1.10   Z 5.03";
+            deviceLabel.text = "标记对象：机柜 A-01";
             controlHint.text = "WASD 移动   ·   鼠标观察   ·   左键标记   ·   Esc 释放鼠标";
             canvas.renderMode = RenderMode.ScreenSpaceCamera;
             canvas.worldCamera = camera;
@@ -132,6 +166,7 @@ public class InspectionUITests
             panel.SetActive(false);
             crosshair.SetActive(previousCrosshair);
             controlHint.text = previousHint;
+            deviceLabel.text = previousDevice;
             camera.transform.position = originalPosition;
             camera.transform.rotation = originalRotation;
             camera.targetTexture = null;
@@ -162,6 +197,8 @@ public class InspectionUITests
         marker.transform.position = new Vector3(-2.8f, 1.1f, 5.03f);
         typeof(InspectionApp).GetField("marker", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(app, marker);
         typeof(InspectionApp).GetField("apiUrl", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(app, "http://localhost:18766/issues");
+        typeof(InspectionApp).GetField("selectedDeviceId", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(app, "A-01");
+        typeof(InspectionApp).GetField("selectedDeviceName", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(app, "机柜 A-01");
         panel.SetActive(true);
         Field<InputField>(app, "titleInput").text = "Unity integration test";
         typeof(InspectionApp).GetMethod("SelectPriority", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(app, new object[] { 2 });
@@ -170,6 +207,7 @@ public class InspectionUITests
         while (state.IsOpen && Time.realtimeSinceStartup < deadline) yield return null;
         Assert.IsFalse(state.IsOpen, Field<Text>(app, "panelMessage").text);
         Assert.IsTrue(look.IsCaptured, "Successful reporting should restore inspection control.");
+        InspectionIssue submitted;
         using (var request = UnityWebRequest.Get("http://localhost:18766/issues"))
         {
             yield return request.SendWebRequest();
@@ -177,6 +215,42 @@ public class InspectionUITests
             StringAssert.Contains("Unity integration test", request.downloadHandler.text);
             StringAssert.Contains("\"priority\":\"high\"", request.downloadHandler.text);
             StringAssert.Contains("\"status\":\"open\"", request.downloadHandler.text);
+            var list = JsonUtility.FromJson<TestIssues>("{\"items\":" + request.downloadHandler.text + "}");
+            submitted = System.Array.Find(list.items, item => item.title == "Unity integration test");
+            Assert.IsNotNull(submitted);
+            Assert.AreEqual("A-01", submitted.deviceId);
+            Assert.AreEqual("机柜 A-01", submitted.deviceName);
+        }
+        var registry = Field<InspectionMarkerSync>(app, "markerSync");
+        Assert.IsNotNull(registry.GetMarker(submitted.id));
+
+        // A failed sync must not discard a saved marker.
+        typeof(InspectionApp).GetField("apiUrl", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(app, "http://127.0.0.1:1/issues");
+        deadline = Time.realtimeSinceStartup + 15f;
+        while (string.IsNullOrEmpty(Field<Text>(app, "syncMessage").text) && Time.realtimeSinceStartup < deadline) yield return null;
+        Assert.IsNotEmpty(Field<Text>(app, "syncMessage").text, "A failed sync should be reported.");
+        Assert.IsNotNull(registry.GetMarker(submitted.id), "A failed sync must retain existing markers.");
+        typeof(InspectionApp).GetField("apiUrl", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(app, "http://localhost:18766/issues");
+
+        yield return ChangeStatus(submitted.id, "resolved");
+        deadline = Time.realtimeSinceStartup + 15f;
+        while (registry.GetMarker(submitted.id) != null && Time.realtimeSinceStartup < deadline) yield return null;
+        Assert.IsNull(registry.GetMarker(submitted.id), "A resolved issue should no longer have a scene marker.");
+        yield return ChangeStatus(submitted.id, "open");
+        deadline = Time.realtimeSinceStartup + 15f;
+        while (registry.GetMarker(submitted.id) == null && Time.realtimeSinceStartup < deadline) yield return null;
+        Assert.IsNotNull(registry.GetMarker(submitted.id), "Reopening should restore the marker.");
+    }
+
+    private static IEnumerator ChangeStatus(string id, string status)
+    {
+        using (var request = new UnityWebRequest("http://localhost:18766/issues/" + id + "/status", "PATCH"))
+        {
+            request.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes("{\"status\":\"" + status + "\"}"));
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+            yield return request.SendWebRequest();
+            Assert.AreEqual(UnityWebRequest.Result.Success, request.result, request.error);
         }
     }
 }

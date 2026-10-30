@@ -13,17 +13,20 @@ public sealed class InspectionApp : MonoBehaviour
     private readonly InspectionLookState look = new InspectionLookState();
     private Camera view;
     private CharacterController player;
+    private InspectionMarkerSync markerSync;
     private GameObject panel, marker, crosshair;
     private InputField titleInput, descriptionInput;
-    private Text message, panelMessage, positionLabel, priorityLabel, controlHint;
+    private Text message, panelMessage, positionLabel, priorityLabel, controlHint, deviceLabel, syncMessage;
     private Button submitButton, cancelButton;
     private readonly Button[] priorityButtons = new Button[3];
     private Font font;
     private bool submitting;
+    private string selectedDeviceId = "", selectedDeviceName = "场景表面";
     private const float MouseSensitivity = 3f;
 
     [Serializable] private class Position { public float x, y, z; }
-    [Serializable] private class Report { public string title, description, priority; public Position position; }
+    [Serializable] private class Report { public string title, description, priority, deviceId, deviceName; public Position position; }
+    [Serializable] private class SavedIssue { public string id; }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void StartApp() { new GameObject("InspectionApp").AddComponent<InspectionApp>(); }
@@ -37,6 +40,8 @@ public sealed class InspectionApp : MonoBehaviour
         player.height = 1.6f; player.radius = .3f; player.center = new Vector3(0, -.8f, 0);
         player.skinWidth = .03f; player.stepOffset = .2f;
         BuildUI();
+        markerSync = gameObject.AddComponent<InspectionMarkerSync>();
+        markerSync.Configure(() => apiUrl, ok => { if (syncMessage != null) syncMessage.text = ok ? "" : "标记同步失败，请检查后端连接。"; });
         look.SetFocus(Application.isFocused);
         look.TryCapture(Time.frameCount);
         ApplyCursorState();
@@ -88,6 +93,7 @@ public sealed class InspectionApp : MonoBehaviour
         var controlsImage = controls.AddComponent<Image>(); controlsImage.color = new Color(.07f, .15f, .18f, .88f); controlsImage.raycastTarget = false;
         controlHint = Label("Help", controls.transform, "WASD 移动   ·   鼠标观察   ·   左键标记   ·   Esc 释放鼠标", new Vector2(14, -36), new Vector2(535, -4), 16); controlHint.color = Color.white;
         message = Label("Message", canvas.transform, "", new Vector2(20, -150), new Vector2(560, -110), 17); message.color = Color.white;
+        syncMessage = Label("SyncMessage", canvas.transform, "", new Vector2(20, -190), new Vector2(600, -150), 16); syncMessage.color = new Color(1f, .78f, .30f);
 
         crosshair = new GameObject("Crosshair", typeof(RectTransform)); crosshair.transform.SetParent(canvas.transform, false);
         Rect(crosshair, new Vector2(.5f, .5f), new Vector2(.5f, .5f), new Vector2(-10, -10), new Vector2(10, 10));
@@ -99,7 +105,7 @@ public sealed class InspectionApp : MonoBehaviour
         var card = new GameObject("ReportPanel", typeof(RectTransform), typeof(Image)); card.transform.SetParent(panel.transform, false);
         Rect(card, new Vector2(.5f, .5f), new Vector2(.5f, .5f), new Vector2(-260, -300), new Vector2(260, 300)); card.GetComponent<Image>().color = new Color(.98f, .99f, .99f);
         Label("Heading", card.transform, "上报巡检问题", new Vector2(28, -58), new Vector2(492, -20), 24);
-        Label("Subheading", card.transform, "记录发现的问题，提交后由管理人员处理", new Vector2(28, -88), new Vector2(492, -58), 16).color = new Color(.36f, .43f, .45f);
+        deviceLabel = Label("Device", card.transform, "", new Vector2(28, -88), new Vector2(492, -58), 16); deviceLabel.color = new Color(.36f, .43f, .45f);
         Label("Title label", card.transform, "问题标题  *", new Vector2(28, -128), new Vector2(492, -98));
         titleInput = Field("Title", card.transform, new Vector2(28, -174), new Vector2(492, -132), "例如：A-01 机柜温度异常");
         Label("Description label", card.transform, "问题描述（选填）", new Vector2(28, -213), new Vector2(492, -183));
@@ -172,8 +178,17 @@ public sealed class InspectionApp : MonoBehaviour
         var direction = Quaternion.Euler(0, view.transform.eulerAngles.y, 0) * move.normalized; player.SimpleMove(direction * 4f);
         if (!look.CanMark(Time.frameCount) || !Input.GetMouseButtonDown(0) || (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())) return;
         if (!Physics.Raycast(view.ViewportPointToRay(new Vector3(.5f, .5f, 0)), out var hit, 100f)) return;
+        BeginReport(hit);
+    }
+
+    private void BeginReport(RaycastHit hit)
+    {
         if (!state.TryOpen()) return;
         if (!look.OpenModal()) { state.Close(); return; }
+        var device = hit.collider.GetComponentInParent<InspectionDevice>();
+        selectedDeviceId = device != null ? device.DeviceID : "";
+        selectedDeviceName = device != null ? device.DeviceName : "场景表面";
+        deviceLabel.text = "标记对象：" + selectedDeviceName;
         marker = GameObject.CreatePrimitive(PrimitiveType.Sphere); marker.name = "待提交标记"; marker.transform.position = hit.point; marker.transform.localScale = Vector3.one * .18f; marker.GetComponent<Renderer>().material.color = Color.red; Destroy(marker.GetComponent<Collider>());
         titleInput.text = ""; descriptionInput.text = ""; panelMessage.text = ""; SelectPriority(1);
         positionLabel.text = string.Format(System.Globalization.CultureInfo.InvariantCulture, "X {0:F2}   Y {1:F2}   Z {2:F2}", hit.point.x, hit.point.y, hit.point.z);
@@ -186,7 +201,7 @@ public sealed class InspectionApp : MonoBehaviour
         if (submitting) return;
         if (!InspectionState.ValidTitle(titleInput.text)) { panelMessage.text = "请填写标题。"; return; }
         var p = marker.transform.position;
-        var report = new Report { title = titleInput.text.Trim(), description = descriptionInput.text, priority = new[] { "low", "medium", "high" }[selectedPriority], position = new Position { x = p.x, y = p.y, z = p.z } };
+        var report = new Report { title = titleInput.text.Trim(), description = descriptionInput.text, priority = new[] { "low", "medium", "high" }[selectedPriority], deviceId = selectedDeviceId, deviceName = selectedDeviceName, position = new Position { x = p.x, y = p.y, z = p.z } };
         StartCoroutine(Send(report));
     }
     private IEnumerator Send(Report report)
@@ -198,7 +213,24 @@ public sealed class InspectionApp : MonoBehaviour
         {
             request.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(JsonUtility.ToJson(report))); request.downloadHandler = new DownloadHandlerBuffer(); request.SetRequestHeader("Content-Type", "application/json"); request.timeout = 10;
             yield return request.SendWebRequest();
-            if (request.result == UnityWebRequest.Result.Success) { marker.name = "已提交标记"; marker.GetComponent<Renderer>().material.color = new Color(.08f, .63f, .56f); marker = null; panel.SetActive(false); state.Close(); look.CloseModal(Time.frameCount); ApplyCursorState(); message.text = "问题已提交。"; }
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                SavedIssue saved = null;
+                try { saved = JsonUtility.FromJson<SavedIssue>(request.downloadHandler.text); } catch (ArgumentException) { }
+                if (saved != null && !string.IsNullOrEmpty(saved.id))
+                {
+                    marker.name = "问题标记 " + saved.id;
+                    marker.GetComponent<Renderer>().material.color = new Color(.08f, .63f, .56f);
+                    markerSync.Register(saved.id, marker);
+                    message.text = "问题已提交。";
+                }
+                else
+                {
+                    Destroy(marker);
+                    message.text = "问题已提交，标记将在同步后恢复。";
+                }
+                marker = null; panel.SetActive(false); state.Close(); look.CloseModal(Time.frameCount); ApplyCursorState();
+            }
             else { panelMessage.text = "提交失败，请检查后端服务后重试。"; }
         }
         submitting = false; submitButton.interactable = true; cancelButton.interactable = true; titleInput.interactable = true; descriptionInput.interactable = true;
