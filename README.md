@@ -110,22 +110,6 @@ go vet ./...
 
 创建问题时提交 `title`、`description`、`priority` 和包含 `x`、`y`、`z` 的 `position`，并可提交 `deviceId`、`deviceName`；优先级为 `low`、`medium`、`high`。状态为 `open`、`in_progress`、`resolved`，例如更新请求体为 `{"status":"resolved"}`。错误响应包含 `error` 字段。
 
-## 待确认事项
-
-- 演示要求中的“真机”是否包含普通电脑上的 Unity Editor 或桌面程序。
-
-## 交付要求
-
-提交三端源码、本 README、AI_LOG.md，以及两段各 3～5 分钟的演示视频。视频需覆盖现场观察、标记及提交问题、网页查看和修改状态、后端重启后数据保留。Unity 项目应保留 Assets、Packages 和 ProjectSettings；不必提交 Library、Temp 和 Logs 等自动生成目录。
-
-当前本机视频文件的时长已读取元数据核对：
-
-| 文件 | 时长 | 时长要求 |
-| --- | --- | --- |
-| `视频讲解/Desktop 2026.10.30 - 19.47.29.03.mp4` | 约 1 分 35 秒 | 不足 3 分钟，需补录或重录 |
-| `视频讲解/Desktop 2026.10.30 - 20.05.43.06.mp4` | 3 分 58 秒 | 符合 3～5 分钟范围 |
-
-时长核对不代表视频内容已验收。`视频讲解/` 当前尚未纳入 Git，提交或打包时需单独检查两段视频是否齐全。既有 Prompt 的阶段总结及一次 AI 结果检查与修改实例，位于 [AI_LOG.md](AI_LOG.md) 末尾。
 
 ## AR 基础问题
 
