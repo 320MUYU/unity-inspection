@@ -15,6 +15,7 @@ import (
 
 var ErrInvalid = errors.New("invalid input")
 var ErrNotFound = errors.New("issue not found")
+var ErrConflict = errors.New("only resolved issues can be deleted")
 
 type Position struct {
 	X float64 `json:"x"`
@@ -25,6 +26,8 @@ type CreateIssue struct {
 	Title       string   `json:"title"`
 	Description string   `json:"description"`
 	Priority    string   `json:"priority"`
+	DeviceID    string   `json:"deviceId"`
+	DeviceName  string   `json:"deviceName"`
 	Position    Position `json:"position"`
 }
 type Issue struct {
@@ -33,6 +36,8 @@ type Issue struct {
 	Description string    `json:"description"`
 	Priority    string    `json:"priority"`
 	Status      string    `json:"status"`
+	DeviceID    string    `json:"deviceId"`
+	DeviceName  string    `json:"deviceName"`
 	Position    Position  `json:"position"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
@@ -102,7 +107,7 @@ func (s *Store) Create(input CreateIssue) (Issue, error) {
 		return Issue{}, err
 	}
 	now := time.Now().UTC()
-	item := Issue{ID: hex.EncodeToString(id[:]), Title: input.Title, Description: input.Description, Priority: input.Priority, Status: "open", Position: input.Position, CreatedAt: now, UpdatedAt: now}
+	item := Issue{ID: hex.EncodeToString(id[:]), Title: input.Title, Description: input.Description, Priority: input.Priority, Status: "open", DeviceID: input.DeviceID, DeviceName: input.DeviceName, Position: input.Position, CreatedAt: now, UpdatedAt: now}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	next := append(append([]Issue{}, s.issues...), item)
@@ -138,4 +143,26 @@ func (s *Store) UpdateStatus(id, status string) (Issue, error) {
 		}
 	}
 	return Issue{}, ErrNotFound
+}
+
+func (s *Store) Delete(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, issue := range s.issues {
+		if issue.ID != id {
+			continue
+		}
+		if issue.Status != "resolved" {
+			return ErrConflict
+		}
+		next := make([]Issue, 0, len(s.issues)-1)
+		next = append(next, s.issues[:i]...)
+		next = append(next, s.issues[i+1:]...)
+		if err := s.persist(next); err != nil {
+			return err
+		}
+		s.issues = next
+		return nil
+	}
+	return ErrNotFound
 }

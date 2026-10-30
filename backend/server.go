@@ -26,6 +26,10 @@ func fail(w http.ResponseWriter, err error) {
 		status = 404
 		message = err.Error()
 	}
+	if errors.Is(err, ErrConflict) {
+		status = http.StatusConflict
+		message = err.Error()
+	}
 	if status == 500 {
 		log.Printf("request failed: %v", err)
 	}
@@ -76,9 +80,16 @@ func NewHandler(store *Store) http.Handler {
 		}
 		jsonResponse(w, 200, issue)
 	})
+	mux.HandleFunc("DELETE /issues/{id}", func(w http.ResponseWriter, r *http.Request) {
+		if err := store.Delete(r.PathValue("id")); err != nil {
+			fail(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(204)
