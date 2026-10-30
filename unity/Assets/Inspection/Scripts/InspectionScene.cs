@@ -23,6 +23,11 @@ public static class InspectionScene
         Cube(root, "Back wall", new Vector3(0, 2, 14.9f), new Vector3(14, 4, .2f), wall);
         Cube(root, "Left wall", new Vector3(-6.9f, 2, 6), new Vector3(.2f, 4, 18), wall);
         Cube(root, "Right wall", new Vector3(6.9f, 2, 6), new Vector3(.2f, 4, 18), wall);
+        var rearBoundary = new GameObject("Rear inspection boundary");
+        rearBoundary.transform.SetParent(root, false);
+        rearBoundary.transform.localPosition = new Vector3(0, 2, -2.9f);
+        rearBoundary.layer = 2; // Unity's built-in Ignore Raycast layer still blocks the character controller.
+        rearBoundary.AddComponent<BoxCollider>().size = new Vector3(14, 4, .2f);
         Cube(root, "Back skirting", new Vector3(0, .16f, 14.77f), new Vector3(13.8f, .32f, .05f), trim);
         Cube(root, "Left skirting", new Vector3(-6.77f, .16f, 6), new Vector3(.05f, .32f, 17.7f), trim);
         Cube(root, "Right skirting", new Vector3(6.77f, .16f, 6), new Vector3(.05f, .32f, 17.7f), trim);

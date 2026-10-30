@@ -36,6 +36,38 @@ public class InspectionUITests
     }
 
     [UnityTest]
+    public IEnumerator PlayerCannotLeaveBehindTheRoomAtCentreOrCorners()
+    {
+        yield return null;
+        var app = Object.FindFirstObjectByType<InspectionApp>();
+        var camera = Field<Camera>(app, "view");
+        var controller = Field<CharacterController>(app, "player");
+        var originalPosition = camera.transform.position;
+        try
+        {
+            foreach (var x in new[] { 0f, -6.25f, 6.25f })
+            {
+                controller.enabled = false;
+                camera.transform.position = new Vector3(x, 1.6f, 0);
+                controller.enabled = true;
+                Physics.SyncTransforms();
+                var flags = controller.Move(Vector3.back * 8f);
+                Assert.IsTrue((flags & CollisionFlags.Sides) != 0, "The rear boundary must block movement at x=" + x);
+                Assert.Greater(camera.transform.position.z, -3f, "The player must remain over the floor at x=" + x);
+            }
+        }
+        finally { controller.enabled = false; camera.transform.position = originalPosition; controller.enabled = true; }
+    }
+
+    [UnityTest]
+    public IEnumerator RearBoundaryIsNotAnInspectableSurface()
+    {
+        yield return null;
+        Physics.SyncTransforms();
+        Assert.IsFalse(Physics.Raycast(new Vector3(0, 1.6f, -2.5f), Vector3.back, 2f), "The invisible boundary must not receive inspection raycasts.");
+    }
+
+    [UnityTest]
     public IEnumerator CentreAimRayHitsTheCabinetInFrontOfThePlayer()
     {
         yield return null;
