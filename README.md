@@ -5,28 +5,30 @@
 ## 技术方案
 
 - 巡检端：Unity 6 `6000.0.85f1` LTS、C#，在本机 Unity Editor 或桌面环境运行。
-- 管理端：React、TypeScript，计划使用 Docker 在本地运行。
-- 后端：Go，计划使用 Docker 在本地运行，持久化保存问题数据。
+- 管理端：React、TypeScript，通过 Docker 在本地运行。
+- 后端：Go，通过 Docker 在本地运行，持久化保存问题数据。
 - Unity 与浏览器管理端访问同一个本地 Go 后端。后端绑定 `http://localhost:18765`，管理页面绑定 `http://localhost:3000`。
 
 ## 当前进度
 
-Go 后端、React 管理页面和 Docker Compose 已实现并验证；后端使用 Go 1.23 和 JSON 数据卷，管理端使用 React 18、TypeScript 5.7、Vite 6。Unity 项目正在准备，编辑器和许可证已就绪，但包管理器报错阻止导入；Play 模式、Windows 构建和三端闭环尚待验证。演示视频尚未录制。
+Go 后端、React 管理页面、Unity 机房场景及问题上报已实现；后端使用 Go 1.23 和 JSON 数据卷，管理端使用 React 18、TypeScript 5.7、Vite 6。Unity Edit Mode、Play Mode 测试及隔离后端上报、状态修改和重启持久化验证已通过。Windows 构建已通过启动检查。完整流程仍需人工操作验收，演示视频尚未录制。
 
 ## 启动与接口
 
 启动 Docker Desktop，在项目根目录执行 `docker compose up -d --build`，再访问 `http://localhost:3000`。停止服务执行 `docker compose down`；不要添加 `-v`，否则会删除持久化数据卷。
 
-在 Unity Hub 中使用 Unity 6 `6000.0.85f1` 打开 `unity` 目录。编辑器首次导入时会尝试创建巡检场景；可通过 `Inspection > Open inspection scene` 打开场景并进入 Play 模式。该步骤尚未在编辑器中验证。
+在 Unity Hub 中使用 Unity 6 `6000.0.85f1` 打开 `unity` 目录，通过 `Inspection > Open inspection scene` 打开场景并进入 Play 模式。已在本机生成的 Windows 测试构建位于 `unity/Builds/Inspection/Inspection.exe`；该目录属于构建产物，不纳入源码提交，其他机器需自行构建。
 
-计划操作为 WASD 移动、按住鼠标右键转动视角、左键点击场景放置标记。填写面板打开时忽略场景点击，取消时移除未保存的标记。
+操作为 WASD 移动、按住鼠标右键转动视角、左键点击场景放置标记。填写面板打开时忽略场景点击，取消时移除未保存的标记。提交失败会保留填写内容以便重试。已提交标记只保留在当前场景会话内；从后端恢复历史标记属于未实现的加分项。
+
+本次批处理测试环境需要在启动 Unity 前临时设置 `ALLUSERSPROFILE` 为 `ProgramData`；若遇到 Package Manager 报 `The "path" argument must be of type string. Received undefined`，可检查启动进程是否缺少该变量。该问题与实际桌面环境是否复现需分别确认。
 
 后端接口：`GET /health` 检查服务，`POST /issues` 创建问题，`GET /issues` 查询列表，`PATCH /issues/{id}/status` 修改状态，例如请求体 `{"status":"resolved"}`。创建时提交 `title`、`description`、`priority` 和包含 `x`、`y`、`z` 的 `position`；优先级为 `low`、`medium`、`high`，状态为 `open`、`in_progress`、`resolved`。错误响应包含 `error` 字段。
 
 ## 待确认事项
 
 - 演示要求中的“真机”是否包含普通电脑上的 Unity Editor 或桌面程序。
-- 按当前决定，填写面板打开时为模态状态，忽略场景点击。
+- 是否需要恢复场景中历史问题标记：任务书将此列为可选加分项，当前未实现。
 
 ## 交付要求
 
