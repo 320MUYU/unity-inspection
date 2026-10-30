@@ -14,6 +14,9 @@ public static class InspectionScene
         var metal = MakeMaterial("Metal", new Color(.59f, .65f, .65f));
         var green = MakeMaterial("Indicator green", new Color(.32f, .75f, .49f));
         var amber = MakeMaterial("Safety marking", new Color(.95f, .71f, .19f));
+        var electricalBody = MakeMaterial("Electrical box body", new Color(.62f, .66f, .64f));
+        var electricalDoor = MakeMaterial("Electrical box door", new Color(.48f, .53f, .51f));
+        var electricalSwitch = MakeMaterial("Electrical switch", new Color(.14f, .17f, .16f));
 
         // Fixed geometry keeps reported positions meaningful across sessions.
         Cube(root, "Ground", new Vector3(0, -.1f, 6), new Vector3(14, .2f, 18), floor);
@@ -28,9 +31,7 @@ public static class InspectionScene
 
         Cabinet(root, "A-01", new Vector3(-2.8f, 1.1f, 5.6f), cabinet, panel, metal, green);
         Cabinet(root, "A-02", new Vector3(2.8f, 1.1f, 7.6f), cabinet, panel, metal, green);
-        Cube(root, "Electrical cabinet", new Vector3(-5.6f, 1.25f, 11.6f), new Vector3(1.3f, 1.8f, .62f), cabinet);
-        Cube(root, "Electrical door", new Vector3(-5.6f, 1.25f, 11.27f), new Vector3(1.16f, 1.64f, .05f), panel);
-        Cube(root, "Electrical safety plaque", new Vector3(-5.6f, 1.48f, 11.23f), new Vector3(.42f, .26f, .02f), amber);
+        ElectricalBox(root, new Vector3(-5.6f, 1.25f, 11.6f), electricalBody, electricalDoor, electricalSwitch, metal, amber);
         // Pipes retain their primitive colliders and are valid inspection targets.
         Cylinder(root, "Horizontal pipe", new Vector3(3.6f, 2.85f, 14.53f), new Vector3(.18f, 2.3f, .18f), new Vector3(0, 0, 90), metal);
         Cylinder(root, "Vertical pipe", new Vector3(5.85f, 1.55f, 14.53f), new Vector3(.18f, 1.3f, .18f), Vector3.zero, metal);
@@ -96,6 +97,43 @@ public static class InspectionScene
             Cube(parent, id + " vent " + (i + 1), new Vector3(position.x - .12f, position.y - .16f - i * .14f, front - .035f), new Vector3(.75f, .035f, .025f), metal);
         Cube(parent, id + " indicator", new Vector3(position.x - .47f, position.y + .66f, front - .035f), new Vector3(.08f, .08f, .025f), green);
         Label(parent, id + " label", id, new Vector3(position.x - .30f, position.y + .69f, front - .055f), .095f);
+    }
+
+    private static void ElectricalBox(Transform parent, Vector3 position, Material body, Material door, Material dark, Material metal, Material amber)
+    {
+        // Retain the original centre while making the raised electrical box clearly smaller than the floor-standing racks.
+        Cube(parent, "Electrical cabinet", position, new Vector3(1.20f, 1.35f, .62f), body);
+        var front = position.z - .33f;
+        Cube(parent, "Electrical door", new Vector3(position.x, position.y, front), new Vector3(1.08f, 1.23f, .05f), door);
+        Cube(parent, "Electrical mounting bracket", new Vector3(-6.28f, position.y, position.z), new Vector3(1.18f, .14f, .35f), metal);
+        Cube(parent, "Electrical handle", new Vector3(position.x + .43f, position.y, front - .04f), new Vector3(.045f, .28f, .035f), dark);
+
+        for (var i = 0; i < 3; i++)
+        {
+            var x = position.x - .30f + i * .30f;
+            Cube(parent, "Electrical switch " + (i + 1), new Vector3(x, position.y - .33f, front - .04f), new Vector3(.18f, .10f, .04f), dark);
+            Cylinder(parent, "Electrical conduit " + (i + 1), new Vector3(x, position.y + .91f, position.z), new Vector3(.10f, .24f, .10f), Vector3.zero, metal);
+        }
+
+        var warning = new Vector3(position.x, position.y + .27f, front - .035f);
+        WarningMesh(parent, "Electrical warning triangle", warning, amber,
+            new[] { new Vector3(-.24f, -.18f, 0), new Vector3(0, .21f, 0), new Vector3(.24f, -.18f, 0) },
+            new[] { 0, 1, 2 });
+        WarningMesh(parent, "Electrical warning bolt", warning + new Vector3(0, 0, -.005f), dark,
+            new[] { new Vector3(-.01f, .105f, 0), new Vector3(-.09f, -.015f, 0), new Vector3(-.015f, -.015f, 0), new Vector3(-.045f, -.11f, 0), new Vector3(.085f, .025f, 0), new Vector3(.02f, .025f, 0) },
+            new[] { 0, 2, 1, 0, 5, 2, 2, 4, 3, 2, 5, 4 });
+    }
+
+    private static void WarningMesh(Transform parent, string name, Vector3 position, Material material, Vector3[] vertices, int[] triangles)
+    {
+        var obj = new GameObject(name, typeof(MeshFilter), typeof(MeshRenderer));
+        obj.transform.SetParent(parent, false);
+        obj.transform.localPosition = position;
+        var mesh = new Mesh { name = name, vertices = vertices, triangles = triangles };
+        mesh.RecalculateNormals();
+        obj.GetComponent<MeshFilter>().sharedMesh = mesh;
+        obj.GetComponent<MeshRenderer>().sharedMaterial = material;
+        // No collider on the symbol: clicks pass through to the door's real surface.
     }
 
     private static void Label(Transform parent, string name, string text, Vector3 position, float characterSize)
