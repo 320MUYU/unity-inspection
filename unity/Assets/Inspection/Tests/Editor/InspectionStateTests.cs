@@ -37,4 +37,15 @@ public class InspectionStateTests
         }
         finally { Object.DestroyImmediate(camera.transform.parent.gameObject); }
     }
+
+    [Test]
+    public void RuntimeShadersAreReferencedByResources()
+    {
+        foreach (var name in new[] { "AlwaysIncludeStandard", "AlwaysIncludeUI", "AlwaysIncludeText" })
+        {
+            var material = Resources.Load<Material>(name);
+            Assert.IsNotNull(material, name + " must be included in Windows builds.");
+            Assert.IsNotNull(material.shader, name + " must reference a shader.");
+        }
+    }
 }
