@@ -224,6 +224,33 @@ public class InspectionUITests
         var registry = Field<InspectionMarkerSync>(app, "markerSync");
         Assert.IsNotNull(registry.GetMarker(submitted.id));
 
+        if (System.Environment.GetEnvironmentVariable("INSPECTION_BROWSER_E2E") == "1")
+        {
+            // The isolated browser test resolves this exact record and waits for this signal before deleting it.
+            deadline = Time.realtimeSinceStartup + 90f;
+            while (registry.GetMarker(submitted.id) != null && Time.realtimeSinceStartup < deadline) yield return null;
+            Assert.IsNull(registry.GetMarker(submitted.id), "The browser's status update should remove this marker.");
+            var signalPath = System.Environment.GetEnvironmentVariable("INSPECTION_E2E_SIGNAL");
+            Assert.IsFalse(string.IsNullOrEmpty(signalPath), "An isolated test signal path is required.");
+            File.WriteAllText(signalPath, submitted.id);
+            var removed = false;
+            while (!removed && Time.realtimeSinceStartup < deadline)
+            {
+                using (var request = UnityWebRequest.Get("http://localhost:18766/issues"))
+                {
+                    yield return request.SendWebRequest();
+                    if (request.result == UnityWebRequest.Result.Success)
+                    {
+                        var list = JsonUtility.FromJson<TestIssues>("{\"items\":" + request.downloadHandler.text + "}");
+                        removed = System.Array.Find(list.items, item => item.id == submitted.id) == null;
+                    }
+                }
+                if (!removed) yield return new WaitForSecondsRealtime(.25f);
+            }
+            Assert.IsTrue(removed, "The browser should delete the resolved issue.");
+            yield break;
+        }
+
         // A failed sync must not discard a saved marker.
         typeof(InspectionApp).GetField("apiUrl", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(app, "http://127.0.0.1:1/issues");
         deadline = Time.realtimeSinceStartup + 15f;
