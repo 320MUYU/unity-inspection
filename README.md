@@ -11,21 +11,62 @@
 
 ## 当前进度
 
-Go 后端、React 管理页面、Unity 机房场景及问题上报已实现；后端使用 Go 1.23 和 JSON 数据卷，管理端使用 React 18、TypeScript 5.7、Vite 6。Unity Edit Mode 和 Play Mode 测试已通过；隔离联调中，同一条 Unity 提交的问题经管理页修改状态后，在后端重启后仍然存在。联调使用浏览器请求路由切换到隔离后端。Windows 构建已通过启动检查。完整流程仍需人工操作验收，演示视频尚未录制。
+Go 后端、React 管理页面、Unity 机房场景和问题上报已实现。已完成的优化包括鼠标直接转动视角、中心准星标记、移动碰撞，以及机柜和配电箱的外观区分。
 
-## 启动与接口
+Unity Edit Mode 和 Play Mode 测试、React 测试及隔离环境中的三端联调已通过。Windows 构建已通过启动检查；真实鼠标操作仍需人工体验，两段演示视频尚未录制。
 
-启动 Docker Desktop，在项目根目录执行 `docker compose up -d --build`，再访问 `http://localhost:3000`。停止服务执行 `docker compose down`；不要添加 `-v`，否则会删除持久化数据卷。
+## 本地启动
 
-在 Unity Hub 中使用 Unity 6 `6000.0.85f1` 打开 `unity` 目录，通过 `Inspection > Open inspection scene` 打开场景并进入 Play 模式。已在本机生成的 Windows 测试构建位于 `unity/Builds/Inspection/Inspection.exe`；该目录属于构建产物，不纳入源码提交，其他机器需自行构建。
+### 1. 启动后端和管理端
 
-操作为 WASD 移动、直接移动鼠标转动视角、左键在屏幕中心准星命中的位置放置标记。按 `Esc` 或窗口失焦会释放鼠标；点击画面可恢复巡检，该次点击不会创建标记。填写面板打开时释放鼠标并忽略场景点击，取消时移除未保存的标记；提交失败会保留填写内容以便重试。已提交标记只保留在当前场景会话内；从后端恢复历史标记属于未实现的加分项。
+启动 Docker Desktop，在项目根目录执行：
 
-机柜为落地高柜，配电箱为带高压标识、开关和线缆的较小箱体。此次调整保留了配电箱的中心位置，但表面尺寸发生变化，调整前保存的坐标可能不再紧贴其表面。
+```powershell
+docker compose up -d --build
+```
 
-本次批处理测试环境需要在启动 Unity 前临时设置 `ALLUSERSPROFILE` 为 `ProgramData`；若遇到 Package Manager 报 `The "path" argument must be of type string. Received undefined`，可检查启动进程是否缺少该变量。该问题与实际桌面环境是否复现需分别确认。
+- 管理页面：<http://localhost:3000>
+- 后端健康检查：<http://localhost:18765/health>
+- 查看容器状态：`docker compose ps`
 
-后端接口：`GET /health` 检查服务，`POST /issues` 创建问题，`GET /issues` 查询列表，`PATCH /issues/{id}/status` 修改状态，例如请求体 `{"status":"resolved"}`。创建时提交 `title`、`description`、`priority` 和包含 `x`、`y`、`z` 的 `position`；优先级为 `low`、`medium`、`high`，状态为 `open`、`in_progress`、`resolved`。错误响应包含 `error` 字段。
+停止服务时执行 `docker compose down`。不要添加 `-v`，因为该参数会删除保存问题数据的 Docker 数据卷。
+
+### 2. 启动 Unity 巡检端
+
+在 Unity Hub 中使用 Unity 6 `6000.0.85f1` 打开项目根目录下的 `unity` 文件夹，通过菜单 `Inspection > Open inspection scene` 打开巡检场景，再进入 Play 模式。
+
+本机已生成的 Windows 测试构建位于 `unity/Builds/Inspection/Inspection.exe`。运行时应保留同目录下的其他构建文件；`Builds` 不纳入源码提交，其他机器需自行构建。
+
+## 巡检操作
+
+1. 使用 `WASD` 移动，直接移动鼠标观察场景。
+2. 将屏幕中央准星对准设备或场景表面，点击鼠标左键放置标记。
+3. 在弹出的表单中填写必填标题、可选描述和优先级，点击“提交问题”。提交失败时表单会保留内容，可检查后端后重试。
+4. 在管理页面刷新问题列表，查看上报记录并修改处理状态。
+
+按 `Esc` 或窗口失焦会释放鼠标；点击画面可恢复巡检，该次点击不会创建标记。表单打开时会释放鼠标并忽略场景点击；取消时移除未保存标记。角色移动会受到场景碰撞体阻挡。
+
+机柜为落地高柜，配电箱为带高压标识、开关和线缆的较小箱体。配电箱优化保留了中心位置，但表面尺寸发生变化，调整前保存的坐标可能不再紧贴其表面。已提交标记只保留在当前场景会话内；从后端恢复历史标记属于未实现的加分项。
+
+## 检查与测试
+
+- 最近一次 Unity 验证：12 项 Edit Mode 测试、5 项 Play Mode 测试通过；Play Mode 上报测试使用隔离后端和临时数据卷。
+- 管理端测试：在 `web` 目录执行 `npm test`；生产构建执行 `npm run build`，需要安装项目依赖。
+- Windows 构建：已重新构建并通过启动日志检查；鼠标手感仍需人工体验。
+- 完整联调：已在隔离环境验证 Unity 上报、管理页修改状态和后端重启后数据保留；测试中网页请求被路由至隔离后端。
+
+本次 Unity 批处理测试环境需要在启动 Unity 前临时设置 `ALLUSERSPROFILE` 为 `ProgramData`；若遇到 Package Manager 报 `The "path" argument must be of type string. Received undefined`，可检查启动进程是否缺少该变量。该问题与实际桌面环境是否复现需分别确认。
+
+## 后端接口
+
+| 方法与路径 | 用途 |
+| --- | --- |
+| `GET /health` | 检查后端服务状态 |
+| `POST /issues` | 创建巡检问题 |
+| `GET /issues` | 获取问题列表 |
+| `PATCH /issues/{id}/status` | 更新指定问题的处理状态 |
+
+创建问题时提交 `title`、`description`、`priority` 和包含 `x`、`y`、`z` 的 `position`；优先级为 `low`、`medium`、`high`。状态为 `open`、`in_progress`、`resolved`，例如更新请求体为 `{"status":"resolved"}`。错误响应包含 `error` 字段。
 
 ## 待确认事项
 
