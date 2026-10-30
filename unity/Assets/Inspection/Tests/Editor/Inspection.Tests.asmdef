@@ -1,0 +1,6 @@
+{
+  "name": "Inspection.Tests",
+  "references": ["Inspection.Runtime"],
+  "includePlatforms": ["Editor"],
+  "optionalUnityReferences": ["TestAssemblies"]
+}
