@@ -11,7 +11,7 @@
 
 ## 当前进度
 
-Go 后端、React 管理页面、Unity 机房场景及问题上报已实现；后端使用 Go 1.23 和 JSON 数据卷，管理端使用 React 18、TypeScript 5.7、Vite 6。Unity Edit Mode、Play Mode 测试及隔离后端上报、状态修改和重启持久化验证已通过。Windows 构建已通过启动检查。完整流程仍需人工操作验收，演示视频尚未录制。
+Go 后端、React 管理页面、Unity 机房场景及问题上报已实现；后端使用 Go 1.23 和 JSON 数据卷，管理端使用 React 18、TypeScript 5.7、Vite 6。Unity Edit Mode 和 Play Mode 测试已通过；隔离联调中，同一条 Unity 提交的问题经管理页修改状态后，在后端重启后仍然存在。联调使用浏览器请求路由切换到隔离后端。Windows 构建已通过启动检查。完整流程仍需人工操作验收，演示视频尚未录制。
 
 ## 启动与接口
 
