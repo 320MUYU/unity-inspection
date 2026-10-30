@@ -1,0 +1,5 @@
+{
+  "name": "Inspection.PlayModeTests",
+  "references": ["Inspection.Runtime", "Unity.ugui"],
+  "optionalUnityReferences": ["TestAssemblies"]
+}

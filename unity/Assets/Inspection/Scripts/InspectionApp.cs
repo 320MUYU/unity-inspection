@@ -8,17 +8,18 @@ using UnityEngine.UI;
 
 public sealed class InspectionApp : MonoBehaviour
 {
-    private const string Api = "http://localhost:18765/issues";
+    private string apiUrl = "http://localhost:18765/issues";
     private readonly InspectionState state = new InspectionState();
     private Camera view;
     private GameObject panel, marker;
     private InputField titleInput, descriptionInput;
-    private Dropdown priorityInput;
-    private Text message, panelMessage;
+    private Text message, panelMessage, positionLabel, priorityLabel;
     private Button submitButton, cancelButton;
+    private readonly Button[] priorityButtons = new Button[3];
     private Font font;
     private bool submitting;
     private float pitch;
+    private int lastModalCloseFrame = -1;
 
     [Serializable] private class Position { public float x, y, z; }
     [Serializable] private class Report { public string title, description, priority; public Position position; }
@@ -30,30 +31,8 @@ public sealed class InspectionApp : MonoBehaviour
     {
         font = Font.CreateDynamicFontFromOSFont("Microsoft YaHei", 18);
         if (font == null) font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        BuildScene();
+        view = InspectionScene.Build();
         BuildUI();
-    }
-
-    private static GameObject Block(string name, Vector3 position, Vector3 scale, Color color)
-    {
-        var obj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        obj.name = name; obj.transform.position = position; obj.transform.localScale = scale;
-        obj.GetComponent<Renderer>().material.color = color;
-        return obj;
-    }
-
-    private void BuildScene()
-    {
-        Block("地面", new Vector3(0, -0.1f, 4), new Vector3(14, 0.2f, 16), new Color(.55f, .60f, .62f));
-        Block("后墙", new Vector3(0, 2, 11.5f), new Vector3(14, 4, .2f), new Color(.77f, .81f, .82f));
-        Block("左墙", new Vector3(-7, 2, 4), new Vector3(.2f, 4, 15), new Color(.72f, .77f, .79f));
-        Block("一号机柜", new Vector3(-2, 1, 5), new Vector3(1.5f, 2, 1), new Color(.18f, .40f, .45f));
-        Block("二号设备", new Vector3(2, .75f, 7), new Vector3(2, 1.5f, 1.5f), new Color(.35f, .49f, .53f));
-        var lightObject = new GameObject("Directional Light"); var light = lightObject.AddComponent<Light>(); light.type = LightType.Directional; light.intensity = 1.2f; lightObject.transform.rotation = Quaternion.Euler(50, -30, 0);
-        var cameraObject = new GameObject("Inspection Camera"); cameraObject.tag = "MainCamera";
-        view = cameraObject.AddComponent<Camera>();
-        view.transform.position = new Vector3(0, 1.6f, 0); view.transform.rotation = Quaternion.identity;
-        view.clearFlags = CameraClearFlags.SolidColor; view.backgroundColor = new Color(.63f, .76f, .8f);
     }
 
     private static RectTransform Rect(GameObject obj, Vector2 anchorMin, Vector2 anchorMax, Vector2 offsetMin, Vector2 offsetMax)
@@ -69,44 +48,71 @@ public sealed class InspectionApp : MonoBehaviour
     {
         var obj = Element(name, parent, min, max); var text = obj.AddComponent<Text>(); text.font = font; text.fontSize = size; text.color = new Color(.12f, .2f, .25f); text.text = value; text.alignment = TextAnchor.MiddleLeft; text.raycastTarget = false; return text;
     }
-    private InputField Field(string name, Transform parent, Vector2 min, Vector2 max)
+    private InputField Field(string name, Transform parent, Vector2 min, Vector2 max, string hint, bool multiline = false)
     {
         var obj = Element(name, parent, min, max); var image = obj.AddComponent<Image>(); image.color = new Color(.94f, .96f, .97f);
-        var field = obj.AddComponent<InputField>(); var text = Label("Text", obj.transform, "", new Vector2(8, -34), new Vector2(max.x - min.x - 8, -2)); text.supportRichText = false; field.textComponent = text;
-        var placeholder = Label("Placeholder", obj.transform, "", new Vector2(8, -34), new Vector2(max.x - min.x - 8, -2)); placeholder.color = Color.gray; field.placeholder = placeholder; return field;
+        var field = obj.AddComponent<InputField>(); field.targetGraphic = image;
+        var width = max.x - min.x; var height = max.y - min.y;
+        var text = Label("Text", obj.transform, "", new Vector2(12, -height + 5), new Vector2(width - 12, -5)); text.supportRichText = false; field.textComponent = text;
+        var placeholder = Label("Placeholder", obj.transform, hint, new Vector2(12, -height + 5), new Vector2(width - 12, -5)); placeholder.color = new Color(.42f, .48f, .50f); field.placeholder = placeholder;
+        if (multiline) { field.lineType = InputField.LineType.MultiLineNewline; text.alignment = TextAnchor.UpperLeft; placeholder.alignment = TextAnchor.UpperLeft; }
+        return field;
     }
     private Button MakeButton(string name, Transform parent, string text, Vector2 min, Vector2 max)
     {
-        var obj = Element(name, parent, min, max); var image = obj.AddComponent<Image>(); image.color = new Color(.12f, .48f, .48f); var button = obj.AddComponent<Button>();
+        var obj = Element(name, parent, min, max); var image = obj.AddComponent<Image>(); image.color = new Color(.12f, .40f, .42f); var button = obj.AddComponent<Button>(); button.targetGraphic = image;
         var label = Label("Label", obj.transform, text, new Vector2(0, -(max.y-min.y)), new Vector2(max.x-min.x, 0)); label.color = Color.white; label.alignment = TextAnchor.MiddleCenter; return button;
     }
 
     private void BuildUI()
     {
-        var eventSystem = new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+        if (FindFirstObjectByType<EventSystem>() == null) new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
         var canvasObject = new GameObject("Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
         var canvas = canvasObject.GetComponent<Canvas>(); canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        var scaler = canvasObject.GetComponent<CanvasScaler>(); scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize; scaler.referenceResolution = new Vector2(1280, 720);
-        var help = Label("Help", canvas.transform, "WASD 移动  |  按住右键转动视角  |  左键点击设备或场景标记", new Vector2(20, -54), new Vector2(900, -12)); help.color = Color.white;
-        message = Label("Message", canvas.transform, "", new Vector2(20, -94), new Vector2(900, -58)); message.color = Color.white;
-        panel = new GameObject("Report panel", typeof(RectTransform), typeof(Image)); panel.transform.SetParent(canvas.transform, false);
-        Rect(panel, new Vector2(.5f, .5f), new Vector2(.5f, .5f), new Vector2(-240, -240), new Vector2(240, 240)); panel.GetComponent<Image>().color = new Color(.97f, .98f, .98f);
-        Label("Heading", panel.transform, "上报巡检问题", new Vector2(24, -58), new Vector2(456, -20), 24);
-        Label("Title label", panel.transform, "标题（必填）", new Vector2(24, -100), new Vector2(456, -70));
-        titleInput = Field("Title", panel.transform, new Vector2(24, -140), new Vector2(456, -104));
-        Label("Description label", panel.transform, "描述（可选）", new Vector2(24, -180), new Vector2(456, -150));
-        descriptionInput = Field("Description", panel.transform, new Vector2(24, -220), new Vector2(456, -184));
-        Label("Priority label", panel.transform, "优先级", new Vector2(24, -260), new Vector2(160, -230));
-        // Three explicit buttons keep the priority choice usable without a complex dropdown template.
-        var priorities = new[] { "低", "中", "高" }; var priorityValue = 1;
-        var priorityLabel = Label("Priority value", panel.transform, "当前：中", new Vector2(170, -260), new Vector2(300, -230));
-        for (int i = 0; i < 3; i++) { int captured = i; var button = MakeButton("Priority " + i, panel.transform, priorities[i], new Vector2(24 + i * 95, -305), new Vector2(104 + i * 95, -270)); button.onClick.AddListener(() => { priorityValue = captured; selectedPriority = priorityValue; priorityLabel.text = "当前：" + priorities[captured]; }); }
-        panelMessage = Label("Panel message", panel.transform, "", new Vector2(24, -352), new Vector2(456, -315), 16);
-        submitButton = MakeButton("Submit", panel.transform, "提交", new Vector2(24, -410), new Vector2(200, -365)); submitButton.onClick.AddListener(Submit);
-        cancelButton = MakeButton("Cancel", panel.transform, "取消", new Vector2(220, -410), new Vector2(396, -365)); cancelButton.onClick.AddListener(Cancel);
+        var scaler = canvasObject.GetComponent<CanvasScaler>(); scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize; scaler.referenceResolution = new Vector2(1280, 720); scaler.matchWidthOrHeight = .5f;
+
+        var header = Element("InspectionHeader", canvas.transform, new Vector2(20, -104), new Vector2(480, -20));
+        var headerImage = header.AddComponent<Image>(); headerImage.color = new Color(.07f, .15f, .18f, .88f); headerImage.raycastTarget = false;
+        var title = Label("Title", header.transform, "园区机房巡检", new Vector2(18, -40), new Vector2(440, -8), 23); title.color = Color.white;
+        var hint = Label("Hint", header.transform, "点击设备或场景表面，标记需要处理的问题", new Vector2(18, -72), new Vector2(440, -42), 16); hint.color = new Color(.79f, .88f, .87f);
+
+        var controls = Element("Controls", canvas.transform, new Vector2(20, -56), new Vector2(570, -16));
+        Rect(controls, new Vector2(0, 0), new Vector2(0, 0), new Vector2(20, 16), new Vector2(570, 56));
+        var controlsImage = controls.AddComponent<Image>(); controlsImage.color = new Color(.07f, .15f, .18f, .88f); controlsImage.raycastTarget = false;
+        var help = Label("Help", controls.transform, "WASD 移动   ·   右键转动视角   ·   左键标记", new Vector2(14, -36), new Vector2(535, -4), 16); help.color = Color.white;
+        message = Label("Message", canvas.transform, "", new Vector2(20, -150), new Vector2(560, -110), 17); message.color = Color.white;
+
+        panel = new GameObject("ModalOverlay", typeof(RectTransform), typeof(Image)); panel.transform.SetParent(canvas.transform, false);
+        Rect(panel, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero); panel.GetComponent<Image>().color = new Color(.03f, .08f, .10f, .68f);
+        var card = new GameObject("ReportPanel", typeof(RectTransform), typeof(Image)); card.transform.SetParent(panel.transform, false);
+        Rect(card, new Vector2(.5f, .5f), new Vector2(.5f, .5f), new Vector2(-260, -300), new Vector2(260, 300)); card.GetComponent<Image>().color = new Color(.98f, .99f, .99f);
+        Label("Heading", card.transform, "上报巡检问题", new Vector2(28, -58), new Vector2(492, -20), 24);
+        Label("Subheading", card.transform, "记录发现的问题，提交后由管理人员处理", new Vector2(28, -88), new Vector2(492, -58), 16).color = new Color(.36f, .43f, .45f);
+        Label("Title label", card.transform, "问题标题  *", new Vector2(28, -128), new Vector2(492, -98));
+        titleInput = Field("Title", card.transform, new Vector2(28, -174), new Vector2(492, -132), "例如：A-01 机柜温度异常");
+        Label("Description label", card.transform, "问题描述（选填）", new Vector2(28, -213), new Vector2(492, -183));
+        descriptionInput = Field("Description", card.transform, new Vector2(28, -286), new Vector2(492, -218), "例如：机柜右侧温度明显偏高", true);
+        Label("Priority label", card.transform, "优先级", new Vector2(28, -324), new Vector2(160, -294));
+        priorityLabel = Label("Priority value", card.transform, "", new Vector2(172, -324), new Vector2(420, -294), 16);
+        var priorities = new[] { "低", "中", "高" };
+        for (int i = 0; i < priorities.Length; i++) { int captured = i; priorityButtons[i] = MakeButton("Priority " + i, card.transform, priorities[i], new Vector2(28 + i * 110, -369), new Vector2(124 + i * 110, -332)); priorityButtons[i].onClick.AddListener(() => SelectPriority(captured)); }
+        Label("Position label", card.transform, "标记位置（场景坐标）", new Vector2(28, -407), new Vector2(492, -379), 16);
+        positionLabel = Label("Position", card.transform, "", new Vector2(28, -436), new Vector2(492, -407), 16);
+        panelMessage = Label("Panel message", card.transform, "", new Vector2(28, -486), new Vector2(492, -442), 16); panelMessage.color = new Color(.62f, .18f, .16f);
+        cancelButton = MakeButton("Cancel", card.transform, "取消", new Vector2(28, -554), new Vector2(232, -505)); cancelButton.onClick.AddListener(Cancel);
+        submitButton = MakeButton("Submit", card.transform, "提交问题", new Vector2(256, -554), new Vector2(492, -505)); submitButton.onClick.AddListener(Submit);
         panel.SetActive(false);
     }
     private int selectedPriority = 1;
+
+    private void SelectPriority(int priority)
+    {
+        selectedPriority = priority;
+        var labels = new[] { "低", "中", "高" };
+        priorityLabel.text = "当前选择：" + labels[priority];
+        for (int i = 0; i < priorityButtons.Length; i++)
+            priorityButtons[i].GetComponent<Image>().color = i == priority ? new Color(.12f, .40f, .42f) : new Color(.36f, .43f, .45f);
+    }
 
     private void Update()
     {
@@ -114,14 +120,16 @@ public sealed class InspectionApp : MonoBehaviour
         if (Input.GetMouseButton(1)) { float yaw = Input.GetAxis("Mouse X") * 3; pitch = Mathf.Clamp(pitch - Input.GetAxis("Mouse Y") * 3, -80, 80); view.transform.rotation = Quaternion.Euler(pitch, view.transform.eulerAngles.y + yaw, 0); }
         var move = new Vector3(Input.GetAxisRaw("Horizontal"), 0, Input.GetAxisRaw("Vertical"));
         var direction = Quaternion.Euler(0, view.transform.eulerAngles.y, 0) * move.normalized; view.transform.position += direction * (4 * Time.deltaTime);
-        if (!Input.GetMouseButtonDown(0) || (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())) return;
+        if (Time.frameCount <= lastModalCloseFrame || !Input.GetMouseButtonDown(0) || (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())) return;
         if (!Physics.Raycast(view.ScreenPointToRay(Input.mousePosition), out var hit, 100f)) return;
         if (!state.TryOpen()) return;
         marker = GameObject.CreatePrimitive(PrimitiveType.Sphere); marker.name = "待提交标记"; marker.transform.position = hit.point; marker.transform.localScale = Vector3.one * .18f; marker.GetComponent<Renderer>().material.color = Color.red; Destroy(marker.GetComponent<Collider>());
-        titleInput.text = ""; descriptionInput.text = ""; panelMessage.text = ""; panel.SetActive(true);
+        titleInput.text = ""; descriptionInput.text = ""; panelMessage.text = ""; SelectPriority(1);
+        positionLabel.text = string.Format(System.Globalization.CultureInfo.InvariantCulture, "X {0:F2}   Y {1:F2}   Z {2:F2}", hit.point.x, hit.point.y, hit.point.z);
+        panel.SetActive(true); titleInput.ActivateInputField();
     }
 
-    private void Cancel() { if (submitting) return; if (marker != null) Destroy(marker); marker = null; panel.SetActive(false); state.Close(); message.text = "已取消上报。"; }
+    private void Cancel() { if (submitting) return; if (marker != null) Destroy(marker); marker = null; panel.SetActive(false); state.Close(); lastModalCloseFrame = Time.frameCount; message.text = "已取消上报。"; }
     private void Submit()
     {
         if (submitting) return;
@@ -132,14 +140,17 @@ public sealed class InspectionApp : MonoBehaviour
     }
     private IEnumerator Send(Report report)
     {
-        submitting = true; submitButton.interactable = false; cancelButton.interactable = false; panelMessage.text = "正在提交…";
-        using (var request = new UnityWebRequest(Api, "POST"))
+        submitting = true; submitButton.interactable = false; cancelButton.interactable = false; titleInput.interactable = false; descriptionInput.interactable = false;
+        foreach (var button in priorityButtons) button.interactable = false;
+        panelMessage.text = "正在提交…";
+        using (var request = new UnityWebRequest(apiUrl, "POST"))
         {
             request.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(JsonUtility.ToJson(report))); request.downloadHandler = new DownloadHandlerBuffer(); request.SetRequestHeader("Content-Type", "application/json"); request.timeout = 10;
             yield return request.SendWebRequest();
-            if (request.result == UnityWebRequest.Result.Success) { marker.name = "已提交标记"; marker = null; panel.SetActive(false); state.Close(); message.text = "问题已提交。"; }
+            if (request.result == UnityWebRequest.Result.Success) { marker.name = "已提交标记"; marker.GetComponent<Renderer>().material.color = new Color(.08f, .63f, .56f); marker = null; panel.SetActive(false); state.Close(); lastModalCloseFrame = Time.frameCount; message.text = "问题已提交。"; }
             else { panelMessage.text = "提交失败，请检查后端服务后重试。"; }
         }
-        submitting = false; submitButton.interactable = true; cancelButton.interactable = true;
+        submitting = false; submitButton.interactable = true; cancelButton.interactable = true; titleInput.interactable = true; descriptionInput.interactable = true;
+        foreach (var button in priorityButtons) button.interactable = true;
     }
 }
