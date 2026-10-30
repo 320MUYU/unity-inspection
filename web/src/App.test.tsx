@@ -3,7 +3,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import App from './App';
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 test('shows an error when the server is unavailable', async () => {
   vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
@@ -39,4 +39,37 @@ test('shows an empty state only after a successful empty response', async () => 
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [] }));
   render(<App />);
   expect(await screen.findByText('暂无巡检问题。')).toBeTruthy();
+});
+
+test('shows device names and allows only resolved issues to be deleted after confirmation', async () => {
+  const items = [
+    { id: 'one', title: '机柜异常', deviceId: 'A-01', deviceName: '机柜 A-01', priority: 'high', status: 'resolved', createdAt: '2026-10-29T10:20:00Z' },
+    { id: 'two', title: '旧问题', priority: 'low', status: 'open', createdAt: '2026-10-29T10:20:00Z' },
+  ];
+  const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => items }).mockResolvedValueOnce({ ok: true, status: 204 });
+  vi.stubGlobal('fetch', fetchMock);
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+  render(<App />);
+  expect(await screen.findByText('机柜 A-01')).toBeTruthy();
+  expect(screen.getByText('未记录设备')).toBeTruthy();
+  const button = screen.getByRole('button', { name: '删除机柜异常' });
+  expect(screen.queryByRole('button', { name: '删除旧问题' })).toBeNull();
+  fireEvent.click(button);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  fireEvent.click(button);
+  await waitFor(() => expect(screen.queryByText('机柜异常')).toBeNull());
+  expect(confirm).toHaveBeenCalledTimes(2);
+  expect(fetchMock.mock.calls[1][0]).toContain('/issues/one');
+  expect(fetchMock.mock.calls[1][1].method).toBe('DELETE');
+  expect(screen.getByText('旧问题')).toBeTruthy();
+});
+
+test('keeps a resolved issue visible and reports a delete failure', async () => {
+  const issue = { id: 'one', title: '配电异常', priority: 'medium', status: 'resolved', createdAt: '2026-10-29T10:20:00Z' };
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: true, json: async () => [issue] }).mockResolvedValueOnce({ ok: false, status: 409 }));
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
+  render(<App />);
+  fireEvent.click(await screen.findByRole('button', { name: '删除配电异常' }));
+  await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('删除失败'));
+  expect(screen.getByText('配电异常')).toBeTruthy();
 });

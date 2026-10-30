@@ -41,6 +41,10 @@ td { font-size: 14px; }
 tbody tr:hover { background: #fafcfb; }
 .issue-title { min-width: 220px; color: #263a39; font-weight: 700; overflow-wrap: anywhere; }
 .issue-time { color: #60716c; white-space: nowrap; }
+.issue-device { color: #4f655e; white-space: nowrap; }
+.delete { min-height: 40px; padding: 7px 14px; border: 1px solid #d6ada5; border-radius: 4px; color: #8c3025; background: #fff; cursor: pointer; }
+.delete:hover:not(:disabled) { background: #fff2ef; }
+.delete-unavailable { color: #718078; font-size: 13px; white-space: nowrap; }
 .priority { display: inline-flex; align-items: center; gap: 7px; min-width: 48px; font-weight: 700; white-space: nowrap; }
 .priority-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 .priority.high { color: #a04132; }
