@@ -15,6 +15,43 @@ public class InspectionUITests
     }
 
     [UnityTest]
+    public IEnumerator PlayerCannotMoveThroughTheCabinet()
+    {
+        yield return null;
+        var app = Object.FindFirstObjectByType<InspectionApp>();
+        var camera = Field<Camera>(app, "view");
+        var controller = Field<CharacterController>(app, "player");
+        var originalPosition = camera.transform.position;
+        try
+        {
+            camera.transform.position = new Vector3(0, 1.6f, 5.6f);
+            Physics.SyncTransforms();
+            var flags = controller.Move(Vector3.left * 8f);
+            Assert.IsTrue((flags & CollisionFlags.Sides) != 0, "The rack should block horizontal movement.");
+            Assert.Greater(camera.transform.position.x, -2.0f, "The player must remain outside the rack.");
+        }
+        finally { camera.transform.position = originalPosition; }
+    }
+
+    [UnityTest]
+    public IEnumerator CentreAimRayHitsTheCabinetInFrontOfThePlayer()
+    {
+        yield return null;
+        var app = Object.FindFirstObjectByType<InspectionApp>();
+        var camera = Field<Camera>(app, "view");
+        var originalRotation = camera.transform.rotation;
+        try
+        {
+            camera.transform.LookAt(new Vector3(-2.8f, 1.1f, 5.6f));
+            Physics.SyncTransforms();
+            var ray = camera.ViewportPointToRay(new Vector3(.5f, .5f, 0));
+            Assert.IsTrue(Physics.Raycast(ray, out var hit, 20f));
+            StringAssert.Contains("A-01", hit.collider.gameObject.name);
+        }
+        finally { camera.transform.rotation = originalRotation; }
+    }
+
+    [UnityTest]
     public IEnumerator ReportFormValidatesTitleAndCancelRemovesPendingMarker()
     {
         yield return null;

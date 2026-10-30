@@ -10,16 +10,17 @@ public sealed class InspectionApp : MonoBehaviour
 {
     private string apiUrl = "http://localhost:18765/issues";
     private readonly InspectionState state = new InspectionState();
+    private readonly InspectionLookState look = new InspectionLookState();
     private Camera view;
-    private GameObject panel, marker;
+    private CharacterController player;
+    private GameObject panel, marker, crosshair;
     private InputField titleInput, descriptionInput;
-    private Text message, panelMessage, positionLabel, priorityLabel;
+    private Text message, panelMessage, positionLabel, priorityLabel, controlHint;
     private Button submitButton, cancelButton;
     private readonly Button[] priorityButtons = new Button[3];
     private Font font;
     private bool submitting;
-    private float pitch;
-    private int lastModalCloseFrame = -1;
+    private const float MouseSensitivity = 3f;
 
     [Serializable] private class Position { public float x, y, z; }
     [Serializable] private class Report { public string title, description, priority; public Position position; }
@@ -32,7 +33,13 @@ public sealed class InspectionApp : MonoBehaviour
         font = Font.CreateDynamicFontFromOSFont("Microsoft YaHei", 18);
         if (font == null) font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         view = InspectionScene.Build();
+        player = view.gameObject.AddComponent<CharacterController>();
+        player.height = 1.6f; player.radius = .3f; player.center = new Vector3(0, -.8f, 0);
+        player.skinWidth = .03f; player.stepOffset = .2f;
         BuildUI();
+        look.SetFocus(Application.isFocused);
+        look.TryCapture(Time.frameCount);
+        ApplyCursorState();
     }
 
     private static RectTransform Rect(GameObject obj, Vector2 anchorMin, Vector2 anchorMax, Vector2 offsetMin, Vector2 offsetMax)
@@ -79,8 +86,13 @@ public sealed class InspectionApp : MonoBehaviour
         var controls = Element("Controls", canvas.transform, new Vector2(20, -56), new Vector2(570, -16));
         Rect(controls, new Vector2(0, 0), new Vector2(0, 0), new Vector2(20, 16), new Vector2(570, 56));
         var controlsImage = controls.AddComponent<Image>(); controlsImage.color = new Color(.07f, .15f, .18f, .88f); controlsImage.raycastTarget = false;
-        var help = Label("Help", controls.transform, "WASD 移动   ·   右键转动视角   ·   左键标记", new Vector2(14, -36), new Vector2(535, -4), 16); help.color = Color.white;
+        controlHint = Label("Help", controls.transform, "WASD 移动   ·   鼠标观察   ·   左键标记   ·   Esc 释放鼠标", new Vector2(14, -36), new Vector2(535, -4), 16); controlHint.color = Color.white;
         message = Label("Message", canvas.transform, "", new Vector2(20, -150), new Vector2(560, -110), 17); message.color = Color.white;
+
+        crosshair = new GameObject("Crosshair", typeof(RectTransform)); crosshair.transform.SetParent(canvas.transform, false);
+        Rect(crosshair, new Vector2(.5f, .5f), new Vector2(.5f, .5f), new Vector2(-10, -10), new Vector2(10, 10));
+        CrosshairBar(crosshair.transform, new Vector2(-1, -8), new Vector2(1, 8));
+        CrosshairBar(crosshair.transform, new Vector2(-8, -1), new Vector2(8, 1));
 
         panel = new GameObject("ModalOverlay", typeof(RectTransform), typeof(Image)); panel.transform.SetParent(canvas.transform, false);
         Rect(panel, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero); panel.GetComponent<Image>().color = new Color(.03f, .08f, .10f, .68f);
@@ -105,6 +117,37 @@ public sealed class InspectionApp : MonoBehaviour
     }
     private int selectedPriority = 1;
 
+    private static void CrosshairBar(Transform parent, Vector2 min, Vector2 max)
+    {
+        var bar = new GameObject("CrosshairBar", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+        bar.transform.SetParent(parent, false);
+        Rect(bar, new Vector2(.5f, .5f), new Vector2(.5f, .5f), min, max);
+        var graphic = bar.GetComponent<UnityEngine.UI.Image>(); graphic.color = Color.white; graphic.raycastTarget = false;
+        var outline = bar.AddComponent<Outline>(); outline.effectColor = new Color(0, 0, 0, .85f); outline.effectDistance = Vector2.one;
+    }
+
+    private void ApplyCursorState()
+    {
+        Cursor.lockState = look.CanLook ? CursorLockMode.Locked : CursorLockMode.None;
+        Cursor.visible = !look.CanLook;
+        if (crosshair != null) crosshair.SetActive(look.CanLook);
+        if (controlHint != null) controlHint.text = look.CanLook
+            ? "WASD 移动   ·   鼠标观察   ·   左键标记   ·   Esc 释放鼠标"
+            : "点击画面恢复巡检   ·   Esc 释放鼠标";
+    }
+
+    private void OnApplicationFocus(bool focused)
+    {
+        look.SetFocus(focused);
+        ApplyCursorState();
+    }
+
+    private void OnDestroy()
+    {
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+    }
+
     private void SelectPriority(int priority)
     {
         selectedPriority = priority;
@@ -117,19 +160,27 @@ public sealed class InspectionApp : MonoBehaviour
     private void Update()
     {
         if (state.IsOpen) return;
-        if (Input.GetMouseButton(1)) { float yaw = Input.GetAxis("Mouse X") * 3; pitch = Mathf.Clamp(pitch - Input.GetAxis("Mouse Y") * 3, -80, 80); view.transform.rotation = Quaternion.Euler(pitch, view.transform.eulerAngles.y + yaw, 0); }
+        if (Input.GetKeyDown(KeyCode.Escape)) { look.Release(); ApplyCursorState(); return; }
+        if (!look.CanLook)
+        {
+            if (Input.GetMouseButtonDown(0) && (EventSystem.current == null || !EventSystem.current.IsPointerOverGameObject()) && look.TryCapture(Time.frameCount)) ApplyCursorState();
+            return;
+        }
+        look.ApplyMouseDelta(Input.GetAxisRaw("Mouse X"), Input.GetAxisRaw("Mouse Y"), MouseSensitivity);
+        view.transform.rotation = Quaternion.Euler(look.Pitch, look.Yaw, 0);
         var move = new Vector3(Input.GetAxisRaw("Horizontal"), 0, Input.GetAxisRaw("Vertical"));
-        var direction = Quaternion.Euler(0, view.transform.eulerAngles.y, 0) * move.normalized; view.transform.position += direction * (4 * Time.deltaTime);
-        if (Time.frameCount <= lastModalCloseFrame || !Input.GetMouseButtonDown(0) || (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())) return;
-        if (!Physics.Raycast(view.ScreenPointToRay(Input.mousePosition), out var hit, 100f)) return;
+        var direction = Quaternion.Euler(0, view.transform.eulerAngles.y, 0) * move.normalized; player.SimpleMove(direction * 4f);
+        if (!look.CanMark(Time.frameCount) || !Input.GetMouseButtonDown(0) || (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())) return;
+        if (!Physics.Raycast(view.ViewportPointToRay(new Vector3(.5f, .5f, 0)), out var hit, 100f)) return;
         if (!state.TryOpen()) return;
+        if (!look.OpenModal()) { state.Close(); return; }
         marker = GameObject.CreatePrimitive(PrimitiveType.Sphere); marker.name = "待提交标记"; marker.transform.position = hit.point; marker.transform.localScale = Vector3.one * .18f; marker.GetComponent<Renderer>().material.color = Color.red; Destroy(marker.GetComponent<Collider>());
         titleInput.text = ""; descriptionInput.text = ""; panelMessage.text = ""; SelectPriority(1);
         positionLabel.text = string.Format(System.Globalization.CultureInfo.InvariantCulture, "X {0:F2}   Y {1:F2}   Z {2:F2}", hit.point.x, hit.point.y, hit.point.z);
-        panel.SetActive(true); titleInput.ActivateInputField();
+        panel.SetActive(true); ApplyCursorState(); titleInput.ActivateInputField();
     }
 
-    private void Cancel() { if (submitting) return; if (marker != null) Destroy(marker); marker = null; panel.SetActive(false); state.Close(); lastModalCloseFrame = Time.frameCount; message.text = "已取消上报。"; }
+    private void Cancel() { if (submitting) return; if (marker != null) Destroy(marker); marker = null; panel.SetActive(false); state.Close(); look.CloseModal(Time.frameCount); ApplyCursorState(); message.text = "已取消上报。"; }
     private void Submit()
     {
         if (submitting) return;
@@ -147,7 +198,7 @@ public sealed class InspectionApp : MonoBehaviour
         {
             request.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(JsonUtility.ToJson(report))); request.downloadHandler = new DownloadHandlerBuffer(); request.SetRequestHeader("Content-Type", "application/json"); request.timeout = 10;
             yield return request.SendWebRequest();
-            if (request.result == UnityWebRequest.Result.Success) { marker.name = "已提交标记"; marker.GetComponent<Renderer>().material.color = new Color(.08f, .63f, .56f); marker = null; panel.SetActive(false); state.Close(); lastModalCloseFrame = Time.frameCount; message.text = "问题已提交。"; }
+            if (request.result == UnityWebRequest.Result.Success) { marker.name = "已提交标记"; marker.GetComponent<Renderer>().material.color = new Color(.08f, .63f, .56f); marker = null; panel.SetActive(false); state.Close(); look.CloseModal(Time.frameCount); ApplyCursorState(); message.text = "问题已提交。"; }
             else { panelMessage.text = "提交失败，请检查后端服务后重试。"; }
         }
         submitting = false; submitButton.interactable = true; cancelButton.interactable = true; titleInput.interactable = true; descriptionInput.interactable = true;
