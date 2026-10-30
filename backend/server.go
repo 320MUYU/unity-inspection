@@ -108,6 +108,24 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	// 问题列表为空时，创建一条演示异常。
+	if len(store.List()) == 0 {
+		_, err := store.Create(CreateIssue{
+			Title:       "机柜 A-01 温度异常",
+			Description: "设备温度过高，请现场检查。",
+			Priority:    "high",
+			DeviceID:    "A-01",
+			DeviceName:  "机柜 A-01",
+			Position: Position{
+				X: -2.8,
+				Y: 1.3,
+				Z: 5.01,
+			},
+		})
+		if err != nil {
+			log.Fatal("创建演示异常失败：", err)
+		}
+	}
 	log.Print("listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", NewHandler(store)))
 }
